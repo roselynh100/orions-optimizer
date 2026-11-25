@@ -1,12 +1,12 @@
 import { GEM_COLORS } from "../constants/gemColors.js";
 
 export const GEMS = [
-  { id: "sapphire", name: "Sapphire", rarity: "Rare", tier: 1, color: GEM_COLORS.sapphire, shape: "kite" },
-  { id: "ruby", name: "Ruby", rarity: "Very rare", tier: 2, color: GEM_COLORS.ruby, shape: "cut" },
-  { id: "emerald", name: "Emerald", rarity: "Ultra rare", tier: 3, color: GEM_COLORS.emerald, shape: "square" },
-  { id: "diamond", name: "Diamond", rarity: "Legendary", tier: 4, color: GEM_COLORS.diamond, shape: "round" },
-  { id: "black-diamond", name: "Black diamond", rarity: "Mythical", tier: 5, color: GEM_COLORS["black-diamond"], shape: "round" },
-  { id: "moonstone", name: "Moonstone", rarity: "Otherworldly", tier: 6, color: GEM_COLORS.moonstone, shape: "heart" },
+  { id: "sapphire", name: "Sapphire", rarity: "Rare", tier: 1, color: GEM_COLORS.sapphire, image: "/images/gems/sapphire.png" },
+  { id: "ruby", name: "Ruby", rarity: "Very rare", tier: 2, color: GEM_COLORS.ruby, image: "/images/gems/ruby.png" },
+  { id: "emerald", name: "Emerald", rarity: "Ultra rare", tier: 3, color: GEM_COLORS.emerald, image: "/images/gems/emerald.png" },
+  { id: "diamond", name: "Diamond", rarity: "Legendary", tier: 4, color: GEM_COLORS.diamond, image: "/images/gems/diamond.png" },
+  { id: "black-diamond", name: "Black diamond", rarity: "Mythical", tier: 5, color: GEM_COLORS["black-diamond"], image: "/images/gems/black-diamond.png" },
+  { id: "moonstone", name: "Moonstone", rarity: "Otherworldly", tier: 6, color: GEM_COLORS.moonstone, image: "/images/gems/moonstone.png" },
 ];
 
 export const ITEM_RARITIES = [

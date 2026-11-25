@@ -1,46 +1,32 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { GEMS, ITEM_RARITIES } from "./data/gems.js";
 import { MISSING_RECIPES } from "./data/recipes.js";
 import { formatRecipe, optimizeInventory } from "./optimizer.js";
 
 function GemIcon({ gem }) {
-  if (gem.shape === "heart") {
-    return <span className="gem-icon moonstone-icon" aria-hidden="true">♥</span>;
-  }
-  return (
-    <svg className={`gem-icon ${gem.shape}`} viewBox="0 0 64 64" aria-hidden="true">
-      <defs>
-        <linearGradient id={`gem-${gem.id}`} x1="0" y1="1" x2="1" y2="0">
-          <stop stopColor={gem.color} />
-          <stop offset=".52" stopColor="white" stopOpacity=".68" />
-          <stop offset="1" stopColor={gem.color} />
-        </linearGradient>
-      </defs>
-      <path className="gem-shape" fill={`url(#gem-${gem.id})`} d={gem.shape === "kite"
-        ? "M32 4 49 21 42 51 32 60 22 51 15 21Z"
-        : gem.shape === "cut"
-          ? "M7 13 57 13 49 50 32 60 15 50Z"
-          : gem.shape === "square"
-            ? "M14 6 50 6 59 16 56 50 48 58 16 58 8 50 5 16Z"
-            : "M32 4 52 12 60 32 52 52 32 60 12 52 4 32 12 12Z"} />
-      <path className="gem-facet" d="M32 5 32 58 15 21Z" />
-      <path className="gem-facet facet-light" d="m32 5 20 7-20 20Z" />
-      <path className="gem-facet facet-dark" d="m52 12 8 20-28 0Z" />
-      <path className="gem-facet" d="m60 32-8 20-20-20Z" />
-      <path className="gem-shine" d="m19 17 10-7-3 15-8 7Z" />
-    </svg>
-  );
+  return <img className="gem-icon" src={gem.image} alt="" aria-hidden="true" draggable="false" />;
 }
 
 function App() {
   const [inventory, setInventory] = useState(Object.fromEntries(GEMS.map((gem) => [gem.id, "0"])));
   const [maxedRarities, setMaxedRarities] = useState([]);
   const [goal, setGoal] = useState("quantity");
+  const [preferLowerGems, setPreferLowerGems] = useState(false);
   const [results, setResults] = useState(null);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [optimizationError, setOptimizationError] = useState("");
+  const workerRef = useRef(null);
+  const timerRef = useRef(null);
   const totalGems = useMemo(
     () => Object.values(inventory).reduce((sum, count) => sum + (Number(count) || 0), 0),
     [inventory],
   );
+
+  useEffect(() => () => {
+    workerRef.current?.terminate();
+    if (timerRef.current) window.clearInterval(timerRef.current);
+  }, []);
 
   function toggleRarity(id) {
     setResults(null);
@@ -56,7 +42,44 @@ function App() {
   }
 
   function handleOptimize() {
-    setResults(optimizeInventory(inventory, maxedRarities, goal));
+    if (isOptimizing || MISSING_RECIPES.length > 0) return;
+    setResults(null);
+    setOptimizationError("");
+    setElapsedSeconds(0);
+    setIsOptimizing(true);
+
+    const startedAt = Date.now();
+    let worker;
+    try {
+      worker = new Worker(new URL("./optimizer.worker.js", import.meta.url), { type: "module" });
+    } catch (error) {
+      setIsOptimizing(false);
+      setOptimizationError(error instanceof Error ? error.message : "The optimizer could not start.");
+      return;
+    }
+    workerRef.current = worker;
+    timerRef.current = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 250);
+
+    const finish = () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = null;
+      worker.terminate();
+      workerRef.current = null;
+      setIsOptimizing(false);
+    };
+
+    worker.onmessage = ({ data }) => {
+      finish();
+      if (data.type === "error") setOptimizationError(data.message);
+      else setResults(data.result);
+    };
+    worker.onerror = (event) => {
+      finish();
+      setOptimizationError(event.message || "The optimizer could not complete.");
+    };
+    worker.postMessage({ inventory, maxedRarities, goal, preferLowerGems });
   }
 
   return (
@@ -64,22 +87,25 @@ function App() {
       <main id="top">
         <h1 className="page-title">Orion Optimizer</h1>
 
-        <section className="planner" aria-labelledby="inventory-heading">
+        <section className="planner" aria-labelledby="inventory-heading" aria-busy={isOptimizing}>
           <div className="section-heading">
             <div>
               <h2 id="inventory-heading">How many gems do you have?</h2>
-              <p className="section-subtitle">Enter a count for each. Leave it at zero if you don’t have any.</p>
             </div>
             <div className="gem-total"><span>{totalGems.toLocaleString()}</span><small>gems total</small></div>
           </div>
 
           <div className="gem-grid">
             {GEMS.map((gem) => (
-              <label className={`gem-card ${gem.id}`} htmlFor={`count-${gem.id}`} key={gem.id} style={{ "--gem": gem.color }}>
+              <label className={`gem-card ${gem.id}`} htmlFor={`count-${gem.id}`} key={gem.id} style={{ "--gem": gem.color }} onClick={(event) => {
+                const input = event.currentTarget.querySelector("input");
+                input?.focus();
+                input?.select();
+              }}>
                 <span className="gem-art"><GemIcon gem={gem} /></span>
                 <span className="gem-info"><strong>{gem.name}</strong><small>{gem.rarity}</small></span>
                 <span className="count-wrap">
-                  <input id={`count-${gem.id}`} type="number" min="0" step="1" inputMode="numeric" value={inventory[gem.id]} onChange={(event) => updateCount(gem.id, event.target.value)} aria-label={`${gem.name} count`} />
+                  <input id={`count-${gem.id}`} type="number" min="0" step="1" inputMode="numeric" value={inventory[gem.id]} onChange={(event) => updateCount(gem.id, event.target.value)} onFocus={(event) => event.currentTarget.select()} aria-label={`${gem.name} count`} disabled={isOptimizing} />
                   <span>×</span>
                 </span>
               </label>
@@ -88,11 +114,10 @@ function App() {
 
           <div className="next-section">
             <h2>Skip combinations that give you these</h2>
-            <p className="section-subtitle">Select any item rarity you no longer need.</p>
             <div className="rarity-grid" role="group" aria-label="Item rarities already maxed">
               {ITEM_RARITIES.map((rarity) => (
                 <label className={`rarity-choice ${maxedRarities.includes(rarity.id) ? "checked" : ""}`} key={rarity.id} style={{ "--rarity-color": rarity.color }}>
-                  <input type="checkbox" checked={maxedRarities.includes(rarity.id)} onChange={() => toggleRarity(rarity.id)} />
+                  <input type="checkbox" checked={maxedRarities.includes(rarity.id)} onChange={() => toggleRarity(rarity.id)} disabled={isOptimizing} />
                   <span className="checkmark" aria-hidden="true">✓</span>
                   <span>{rarity.name}</span>
                 </label>
@@ -104,29 +129,47 @@ function App() {
             <h2>What do you want more of?</h2>
             <div className="goal-grid" role="radiogroup" aria-label="Optimization priority">
               <label className={`goal-card ${goal === "quantity" ? "selected" : ""}`}>
-                <input type="radio" name="goal" value="quantity" checked={goal === "quantity"} onChange={() => { setGoal("quantity"); setResults(null); }} />
+                <input type="radio" name="goal" value="quantity" checked={goal === "quantity"} onChange={() => { setGoal("quantity"); setResults(null); }} disabled={isOptimizing} />
                 <span className="goal-icon">✳</span><span><strong>More items</strong><small>Maximize roll count</small></span><span className="radio-dot" />
               </label>
               <label className={`goal-card ${goal === "rarity" ? "selected" : ""}`}>
-                <input type="radio" name="goal" value="rarity" checked={goal === "rarity"} onChange={() => { setGoal("rarity"); setResults(null); }} />
+                <input type="radio" name="goal" value="rarity" checked={goal === "rarity"} onChange={() => { setGoal("rarity"); setResults(null); }} disabled={isOptimizing} />
                 <span className="goal-icon sparkle">✦</span><span><strong>Higher rarity</strong><small>Maximize combined rarity score</small></span><span className="radio-dot" />
               </label>
               <label className={`goal-card ${goal === "balanced" ? "selected" : ""}`}>
-                <input type="radio" name="goal" value="balanced" checked={goal === "balanced"} onChange={() => { setGoal("balanced"); setResults(null); }} />
+                <input type="radio" name="goal" value="balanced" checked={goal === "balanced"} onChange={() => { setGoal("balanced"); setResults(null); }} disabled={isOptimizing} />
                 <span className="goal-icon balance">◒</span><span><strong>A little of both</strong><small>Balance roll count and rarity</small></span><span className="radio-dot" />
               </label>
+            </div>
+            <div className="preference-control">
+              <label className="preference-toggle">
+                <input type="checkbox" checked={preferLowerGems} onChange={(event) => { setPreferLowerGems(event.target.checked); setResults(null); }} disabled={isOptimizing} />
+                <span className="toggle-track" aria-hidden="true"><span /></span>
+                <span>Use up less rare gems first</span>
+              </label>
+              <small>Keeps the same rarity results; prefers combinations that use lower rarity gems</small>
             </div>
           </div>
 
           <div className="action-row">
-            <button type="button" onClick={handleOptimize} disabled={MISSING_RECIPES.length > 0}>Find my best combinations <span className="button-icon" aria-hidden="true">✦</span></button>
+            <button type="button" onClick={handleOptimize} disabled={isOptimizing || MISSING_RECIPES.length > 0}>
+              {isOptimizing ? <>Optimizing… <span className="spinner button-spinner" aria-hidden="true" /></> : <>Find my best combinations <span className="button-icon" aria-hidden="true">✦</span></>}
+            </button>
           </div>
+
+          {isOptimizing && <div className="progress-status" role="status" aria-live="polite">
+            <span className="spinner" aria-hidden="true" />
+            <span>Searching gem combinations</span>
+            <span className="elapsed-time">{elapsedSeconds}s</span>
+          </div>}
+          {optimizationError && <p className="optimizer-error" role="alert">{optimizationError}</p>}
 
           {results && <section className="results-panel" aria-live="polite" aria-labelledby="results-heading">
             <div className="results-heading">
-              <div><h2 id="results-heading">{results.status === "success" && results.itemCount > 0 ? "Best gem combinations" : "No usable rolls found"}</h2></div>
+              <div><h2 id="results-heading">{results.status === "success" && results.itemCount > 0 ? (results.isOptimal ? "Best gem combinations" : "Gem combination plan") : "No usable rolls found"}</h2></div>
               {results.status === "success" && results.itemCount > 0 && <span className="result-count">{results.itemCount} {results.itemCount === 1 ? "item" : "items"}</span>}
             </div>
+            {results.status === "success" && !results.isOptimal && <p className="results-summary">Time limit reached. This is the best valid plan found so far.</p>}
             {results.status === "no-recipes" ? <p className="empty-results">Every item rarity is marked as maxed, so there are no eligible recipes. Unselect a rarity to see combinations.</p>
               : results.status === "no-solution" || results.itemCount === 0 ? <p className="empty-results">There aren’t enough gems in your inventory for any non-maxed combination.</p>
                 : <>
