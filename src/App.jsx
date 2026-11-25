@@ -1,18 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { GEMS, ITEM_RARITIES } from "./data/gems.js";
-import {
-  CONFIGURED_RECIPE_COUNT,
-  MISSING_RECIPES,
-  TOTAL_RECIPE_COUNT,
-} from "./data/recipes.js";
+import { MISSING_RECIPES } from "./data/recipes.js";
 import { formatRecipe, optimizeInventory } from "./optimizer.js";
-
-const DEFAULT_MAXED = ["rare", "very-rare"];
-const GOAL_METHODS = {
-  quantity: "Each roll counts equally; the plan maximizes your total number of items.",
-  rarity: "Each item is worth its rarity rank (Rare = 1 through Otherworldly = 6); the plan maximizes the combined score.",
-  balanced: "Each item adds 1 point for the roll plus its rarity rank, balancing item count with item quality.",
-};
 
 function GemIcon({ gem }) {
   if (gem.shape === "heart") {
@@ -45,7 +34,7 @@ function GemIcon({ gem }) {
 
 function App() {
   const [inventory, setInventory] = useState(Object.fromEntries(GEMS.map((gem) => [gem.id, "0"])));
-  const [maxedRarities, setMaxedRarities] = useState(DEFAULT_MAXED);
+  const [maxedRarities, setMaxedRarities] = useState([]);
   const [goal, setGoal] = useState("quantity");
   const [results, setResults] = useState(null);
   const totalGems = useMemo(
@@ -72,22 +61,12 @@ function App() {
 
   return (
     <div className="shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="Gemwise home"><span className="brand-mark">✦</span><span>gemwise</span></a>
-        <span className="top-note"><span className="status-dot" />Combination planner</span>
-      </header>
-
       <main id="top">
-        <section className="intro">
-          <div className="eyebrow"><span />MAKE EVERY GEM COUNT</div>
-          <h1>Your gems.<br /><em>Your game plan.</em></h1>
-          <p>Tell us what you have, then choose what matters most. We’ll find the smartest way to roll.</p>
-        </section>
+        <h1 className="page-title">Orion Optimizer</h1>
 
         <section className="planner" aria-labelledby="inventory-heading">
           <div className="section-heading">
             <div>
-              <div className="step-label">01 <span>YOUR INVENTORY</span></div>
               <h2 id="inventory-heading">How many gems do you have?</h2>
               <p className="section-subtitle">Enter a count for each. Leave it at zero if you don’t have any.</p>
             </div>
@@ -96,7 +75,7 @@ function App() {
 
           <div className="gem-grid">
             {GEMS.map((gem) => (
-              <label className={`gem-card ${gem.id}`} htmlFor={`count-${gem.id}`} key={gem.id}>
+              <label className={`gem-card ${gem.id}`} htmlFor={`count-${gem.id}`} key={gem.id} style={{ "--gem": gem.color }}>
                 <span className="gem-art"><GemIcon gem={gem} /></span>
                 <span className="gem-info"><strong>{gem.name}</strong><small>{gem.rarity}</small></span>
                 <span className="count-wrap">
@@ -108,9 +87,8 @@ function App() {
           </div>
 
           <div className="next-section">
-            <div className="step-label">02 <span>ITEMS YOU’VE MAXED</span></div>
             <h2>Skip combinations that give you these</h2>
-            <p className="section-subtitle">Select any item rarity you no longer need. Rare and Very rare start selected.</p>
+            <p className="section-subtitle">Select any item rarity you no longer need.</p>
             <div className="rarity-grid" role="group" aria-label="Item rarities already maxed">
               {ITEM_RARITIES.map((rarity) => (
                 <label className={`rarity-choice ${maxedRarities.includes(rarity.id) ? "checked" : ""}`} key={rarity.id} style={{ "--rarity-color": rarity.color }}>
@@ -123,7 +101,6 @@ function App() {
           </div>
 
           <div className="next-section priority-section">
-            <div className="step-label">03 <span>YOUR PRIORITY</span></div>
             <h2>What do you want more of?</h2>
             <div className="goal-grid" role="radiogroup" aria-label="Optimization priority">
               <label className={`goal-card ${goal === "quantity" ? "selected" : ""}`}>
@@ -139,29 +116,15 @@ function App() {
                 <span className="goal-icon balance">◒</span><span><strong>A little of both</strong><small>Balance roll count and rarity</small></span><span className="radio-dot" />
               </label>
             </div>
-            <p className="goal-method">{GOAL_METHODS[goal]}</p>
           </div>
 
           <div className="action-row">
-            <button type="button" onClick={handleOptimize} disabled={MISSING_RECIPES.length > 0}>Find my best combinations <span>↗</span></button>
-            <p className="waiting-note"><span>✧</span> {MISSING_RECIPES.length === 0 ? "Combinations are sorted for your selected priority" : "Add the remaining recipe outcomes to enable recommendations"}</p>
+            <button type="button" onClick={handleOptimize} disabled={MISSING_RECIPES.length > 0}>Find my best combinations <span className="button-icon" aria-hidden="true">✦</span></button>
           </div>
-
-          <aside className="setup-note">
-            <span className="note-icon">i</span>
-            <p><strong>{MISSING_RECIPES.length === 0 ? "All recipe outcomes are mapped" : "Recipe data is still incomplete"}</strong><br />{CONFIGURED_RECIPE_COUNT} of {TOTAL_RECIPE_COUNT} possible combinations are entered.{MISSING_RECIPES.length > 0 ? ` The ${MISSING_RECIPES.length} unknown outcomes are listed below.` : " Recommendations will skip the item rarities you’ve maxed."}</p>
-            <span className="note-sparkle">✦</span>
-          </aside>
-
-          {MISSING_RECIPES.length > 0 && <details className="missing-recipes">
-            <summary>Still needed: {MISSING_RECIPES.length} combinations</summary>
-            <p>Tell me which item rarity each combination produces. Digits are gem values in ascending order; order does not matter.</p>
-            <div className="missing-code-list">{MISSING_RECIPES.map((code) => <code key={code}>{code}</code>)}</div>
-          </details>}
 
           {results && <section className="results-panel" aria-live="polite" aria-labelledby="results-heading">
             <div className="results-heading">
-              <div><div className="step-label">04 <span>YOUR PLAN</span></div><h2 id="results-heading">{results.status === "success" && results.itemCount > 0 ? "Best gem combinations" : "No usable rolls found"}</h2></div>
+              <div><h2 id="results-heading">{results.status === "success" && results.itemCount > 0 ? "Best gem combinations" : "No usable rolls found"}</h2></div>
               {results.status === "success" && results.itemCount > 0 && <span className="result-count">{results.itemCount} {results.itemCount === 1 ? "item" : "items"}</span>}
             </div>
             {results.status === "no-recipes" ? <p className="empty-results">Every item rarity is marked as maxed, so there are no eligible recipes. Unselect a rarity to see combinations.</p>
@@ -179,7 +142,6 @@ function App() {
                 </>}
           </section>}
         </section>
-        <footer>Made for better rolls <span>✦</span></footer>
       </main>
     </div>
   );
